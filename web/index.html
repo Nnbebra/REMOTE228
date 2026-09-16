@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>StudyRemote — Удаленное управление ПК</title>
+  <style>
+    :root {
+      --bg-main: #0b0f19;
+      --bg-panel: rgba(22, 30, 49, 0.85);
+      --bg-card: rgba(30, 41, 67, 0.6);
+      --accent: #3b82f6;
+      --accent-glow: rgba(59, 130, 246, 0.5);
+      --accent-hover: #2563eb;
+      --text-main: #f3f4f6;
+      --text-dim: #9ca3af;
+      --border: rgba(255, 255, 255, 0.1);
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: var(--bg-main);
+      color: var(--text-main);
+      min-height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+    }
+
+    /* Top Navigation Bar */
+    header {
+      height: 48px;
+      background: var(--bg-panel);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      z-index: 50;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      font-size: 15px;
+      background: linear-gradient(135deg, #60a5fa, #a855f7);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .brand-icon {
+      width: 20px;
+      height: 20px;
+      background: #3b82f6;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      -webkit-text-fill-color: white;
+      font-size: 12px;
+    }
+    .nav-tabs {
+      display: flex;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 3px;
+      border-radius: 8px;
+      gap: 2px;
+    }
+    .nav-btn {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      font-size: 13px;
+      padding: 5px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+    .nav-btn.active {
+      background: var(--accent);
+      color: white;
+      box-shadow: 0 2px 8px var(--accent-glow);
+    }
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--text-dim);
+      background: rgba(0, 0, 0, 0.4);
+      padding: 4px 8px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+    }
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--danger);
+    }
+    .status-dot.connected { background: var(--success); box-shadow: 0 0 8px var(--success); }
+
+    /* Main Content Area */
+    main {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+    }
+    .tab-content {
+      position: absolute;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+    }
+    .tab-content.active { display: flex; }
+
+    /* Desktop View */
+    #desktopTab {
+      background: #000;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      touch-action: none;
+      position: relative;
+    }
+    #screenCanvas {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      cursor: crosshair;
+      image-rendering: -webkit-optimize-contrast;
+    }
+    .floating-toolbar {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.9);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border);
+      border-radius: 30px;
+      padding: 6px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      z-index: 40;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+      transition: all 0.3s;
+    }
+    .tool-btn {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-weight: 500;
+      transition: background 0.2s;
+    }
+    .tool-btn:hover, .tool-btn:active {
+      background: var(--accent);
+      color: white;
+    }
+
+    /* Virtual Keyboard & Text Drawer */
+    #keyboardDrawer {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(17, 24, 39, 0.96);
+      backdrop-filter: blur(20px);
+      border-top: 1px solid var(--border);
+      padding: 12px;
+      z-index: 45;
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      box-shadow: 0 -8px 30px rgba(0,0,0,0.7);
+    }
+    .kb-row {
+      display: flex;
+      gap: 6px;
+      justify-content: center;
+      overflow-x: auto;
+    }
+    .kb-key {
+      background: #273549;
+      border: 1px solid rgba(255,255,255,0.15);
+      color: #fff;
+      padding: 7px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      min-width: 38px;
+      text-align: center;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    }
+    .kb-key:active { background: var(--accent); }
+    .text-input-row {
+      display: flex;
+      gap: 6px;
+    }
+    .text-input-row input {
+      flex: 1;
+      background: #111827;
+      border: 1px solid var(--border);
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      outline: none;
+    }
+    .text-input-row button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    /* Terminal Tab */
+    #terminalTab {
+      padding: 16px;
+      background: #090d16;
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .term-output {
+      flex: 1;
+      background: #030712;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      font-family: "Cascadia Code", Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      color: #34d399;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      user-select: text;
+    }
+    .term-controls {
+      display: flex;
+      gap: 8px;
+    }
+    .term-input {
+      flex: 1;
+      background: #1f293d;
+      border: 1px solid var(--border);
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 14px;
+      outline: none;
+    }
+    .term-presets {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+    .preset-chip {
+      background: #1e293b;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      padding: 4px 10px;
+      border-radius: 16px;
+      font-size: 11px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .preset-chip:hover { color: #fff; border-color: var(--accent); }
+
+    /* File Explorer Tab */
+    #filesTab {
+      padding: 16px;
+      overflow-y: auto;
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .file-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .file-path {
+      background: #131b2e;
+      border: 1px solid var(--border);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: monospace;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .file-list {
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .file-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .file-item:hover { background: rgba(255,255,255,0.04); }
+    .file-info { display: flex; align-items: center; gap: 10px; }
+    .file-icon { font-size: 16px; }
+
+    /* Settings & System Tab */
+    #settingsTab {
+      padding: 20px;
+      overflow-y: auto;
+      display: none;
+      flex-direction: column;
+      gap: 16px;
+      max-width: 600px;
+      margin: 0 auto;
+      width: 100%;
+    }
+    .settings-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .card-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #93c5fd;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .stat-bar {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .stat-meta { display: flex; justify-content: space-between; font-size: 12px; }
+    .progress-bg {
+      height: 8px;
+      background: #1f293d;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+      border-radius: 4px;
+      transition: width 0.4s;
+    }
+
+    /* Auth Modal */
+    #authModal {
+      position: fixed;
+      inset: 0;
+      background: rgba(5, 8, 15, 0.92);
+      backdrop-filter: blur(16px);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .auth-box {
+      background: #131b2e;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      width: 100%;
+      max-width: 360px;
+      text-align: center;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.8);
+    }
+    .auth-box h2 { margin-bottom: 8px; font-size: 20px; }
+    .auth-box p { font-size: 13px; color: var(--text-dim); margin-bottom: 20px; }
+    .pin-input {
+      width: 100%;
+      background: #0b0f19;
+      border: 2px solid #2563eb;
+      color: #fff;
+      padding: 12px;
+      border-radius: 10px;
+      font-size: 22px;
+      text-align: center;
+      letter-spacing: 6px;
+      outline: none;
+      margin-bottom: 16px;
+    }
+    .btn-primary {
+      width: 100%;
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 12px;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 15px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn-primary:hover { background: var(--accent-hover); }
+
+    /* Touch notification */
+    #touchIndicator {
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      border: 2px solid var(--accent);
+      background: rgba(59, 130, 246, 0.3);
+      border-radius: 50%;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      display: none;
+      z-index: 60;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Auth Modal -->
+  <div id="authModal">
+    <div class="auth-box">
+      <h2>🔒 StudyRemote</h2>
+      <p>Введите PIN-код для доступа к компьютеру</p>
+      <input type="password" id="pinInput" class="pin-input" placeholder="••••" maxlength="16" autofocus />
+      <button class="btn-primary" onclick="attemptAuth()">Войти в систему</button>
+      <div id="authError" style="color:var(--danger);font-size:12px;margin-top:10px;display:none;">Неверный PIN-код</div>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon">⚡</div>
+      <span>StudyRemote</span>
+    </div>
+
+    <div class="nav-tabs">
+      <button class="nav-btn active" onclick="switchTab('desktopTab', this)">🖥️ Экран</button>
+      <button class="nav-btn" onclick="switchTab('terminalTab', this)">💻 Терминал</button>
+      <button class="nav-btn" onclick="switchTab('filesTab', this)">📁 Файлы</button>
+      <button class="nav-btn" onclick="switchTab('settingsTab', this)">⚙️ Инфо</button>
+    </div>
+
+    <div class="status-pill">
+      <div id="statusDot" class="status-dot"></div>
+      <span id="statusText">Подключение...</span>
+      <span id="fpsBadge" style="margin-left:4px;color:#60a5fa;">0 FPS</span>
+    </div>
+  </header>
+
+  <!-- Main Area -->
+  <main>
+    <div id="touchIndicator"></div>
+
+    <!-- 1. DESKTOP TAB -->
+    <div id="desktopTab" class="tab-content active">
+      <canvas id="screenCanvas"></canvas>
+
+      <!-- Floating Controls -->
+      <div class="floating-toolbar">
+        <button class="tool-btn" onclick="toggleKeyboard()">⌨️ Клавиши</button>
+        <button class="tool-btn" onclick="sendShortcut('ctrl+c')">Copy</button>
+        <button class="tool-btn" onclick="sendShortcut('ctrl+v')">Paste</button>
+        <button class="tool-btn" onclick="sendShortcut('win+l')" style="color:#f87171;">🔒 Lock</button>
+        <select id="qualitySelect" onchange="changeQuality()" style="background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:6px;padding:4px 6px;font-size:11px;outline:none;">
+          <option value="eco">Эко (Мобильный 4G)</option>
+          <option value="normal" selected>Стандарт (Баланс)</option>
+          <option value="high">Высокое (Wi-Fi)</option>
+        </select>
+      </div>
+
+      <!-- Virtual Keyboard Drawer -->
+      <div id="keyboardDrawer">
+        <div class="text-input-row">
+          <input type="text" id="quickTextInput" placeholder="Ввести текст на ПК и нажать Отправить..." onkeydown="if(event.key==='Enter') sendQuickText()" />
+          <button onclick="sendQuickText()">Ввод ↵</button>
+          <button onclick="toggleKeyboard()" style="background:#374151;">✖</button>
+        </div>
+        <div class="kb-row">
+          <button class="kb-key" onclick="sendKey('Escape')">Esc</button>
+          <button class="kb-key" onclick="sendKey('Tab')">Tab</button>
+          <button class="kb-key" onclick="sendShortcut('win')">Win</button>
+          <button class="kb-key" onclick="sendShortcut('alt+tab')">Alt+Tab</button>
+          <button class="kb-key" onclick="sendKey('Backspace')">⌫ Del</button>
+          <button class="kb-key" onclick="sendKey('Enter')">↵ Enter</button>
+          <button class="kb-key" onclick="sendKey('Up')">▲</button>
+          <button class="kb-key" onclick="sendKey('Down')">▼</button>
+          <button class="kb-key" onclick="sendKey('Left')">◄</button>
+          <button class="kb-key" onclick="sendKey('Right')">►</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. TERMINAL TAB -->
+    <div id="terminalTab" class="tab-content">
+      <div class="term-presets">
+        <span class="preset-chip" onclick="runPreset('git status')">git status</span>
+        <span class="preset-chip" onclick="runPreset('git pull')">git pull</span>
+        <span class="preset-chip" onclick="runPreset('dir')">dir</span>
+        <span class="preset-chip" onclick="runPreset('tasklist')">tasklist</span>
+        <span class="preset-chip" onclick="runPreset('ipconfig')">ipconfig</span>
+      </div>
+      <div id="termOutput" class="term-output">StudyRemote Remote Terminal v1.0&#10;Готов к выполнению команд PowerShell / CMD...&#10;</div>
+      <div class="term-controls">
+        <input type="text" id="termInput" class="term-input" placeholder="Введите команду (например: git log -n 3)..." onkeydown="if(event.key==='Enter') sendTermCommand()" />
+        <button class="btn-primary" style="width:auto;padding:0 20px;" onclick="sendTermCommand()">Выполнить</button>
+      </div>
+    </div>
+
+    <!-- 3. FILES TAB -->
+    <div id="filesTab" class="tab-content">
+      <div class="file-toolbar">
+        <button class="tool-btn" onclick="navigateFiles('..')">⬆️ Наверх</button>
+        <div id="currentPath" class="file-path">C:\Users\hi Maxim\Desktop</div>
+        <button class="tool-btn" onclick="refreshFiles()">🔄 Обновить</button>
+      </div>
+      <div id="fileList" class="file-list">
+        <!-- populated dynamically -->
+      </div>
+    </div>
+
+    <!-- 4. SETTINGS & STATS TAB -->
+    <div id="settingsTab" class="tab-content">
+      <div class="settings-card">
+        <div class="card-title">📊 Мониторинг системы ПК</div>
+        <div class="stat-bar">
+          <div class="stat-meta"><span>Загрузка процессора (CPU)</span><span id="cpuVal">0%</span></div>
+          <div class="progress-bg"><div id="cpuBar" class="progress-fill" style="width: 0%;"></div></div>
+        </div>
+        <div class="stat-bar">
+          <div class="stat-meta"><span>Оперативная память (RAM)</span><span id="ramVal">0%</span></div>
+          <div class="progress-bg"><div id="ramBar" class="progress-fill" style="width: 0%;"></div></div>
+        </div>
+        <div class="stat-bar">
+          <div class="stat-meta"><span>Диск C:</span><span id="diskVal">0%</span></div>
+          <div class="progress-bg"><div id="diskBar" class="progress-fill" style="width: 0%;"></div></div>
+        </div>
+      </div>
+
+      <div class="settings-card">
+        <div class="card-title">⚡ Управление питанием</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="tool-btn" onclick="sendShortcut('win+l')" style="color:#ef4444;">🔒 Заблокировать ПК</button>
+          <button class="tool-btn" onclick="executePower('sleep')">🌙 Спящий режим</button>
+          <button class="tool-btn" onclick="executePower('mute')">🔇 Выключить звук</button>
+        </div>
+      </div>
+
+      <div class="settings-card">
+        <div class="card-title">🔐 Авторизация</div>
+        <p style="font-size:12px;color:var(--text-dim);">Текущий PIN сохранен в браузере. Вы можете изменить его в конфигурации сервера.</p>
+        <button class="tool-btn" onclick="logout()" style="width:fit-content;">Выйти из сессии</button>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    let ws = null;
+    let authPin = sessionStorage.getItem('studyremote_pin') || '';
+    let canvas = document.getElementById('screenCanvas');
+    let ctx = canvas.getContext('2d');
+    let screenW = 2560, screenH = 1440;
+    let fpsCount = 0, lastFpsTime = Date.now();
+    let currentPath = 'C:\\Users\\hi Maxim\\Desktop';
+    let isTouching = false;
+
+    // PIN Auth Check
+    if (authPin) {
+      document.getElementById('authModal').style.display = 'none';
+      connectWS();
+    }
+
+    function attemptAuth() {
+      const pin = document.getElementById('pinInput').value.trim();
+      if (!pin) return;
+      authPin = pin;
+      connectWS(true);
+    }
+
+    function logout() {
+      sessionStorage.removeItem('studyremote_pin');
+      location.reload();
+    }
+
+    function connectWS(isManual = false) {
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const url = `${protocol}//${location.host}/ws?pin=${encodeURIComponent(authPin)}`;
+      
+      ws = new WebSocket(url);
+      ws.binaryType = 'blob';
+
+      ws.onopen = () => {
+        document.getElementById('statusDot').className = 'status-dot connected';
+        document.getElementById('statusText').innerText = 'Онлайн';
+        document.getElementById('authModal').style.display = 'none';
+        sessionStorage.setItem('studyremote_pin', authPin);
+        sendQuality();
+        loadSystemStats();
+      };
+
+      ws.onmessage = async (event) => {
+        if (typeof event.data === 'string') {
+          try {
+            const msg = JSON.parse(event.data);
+            handleJsonMessage(msg);
+          } catch (e) {}
+        } else if (event.data instanceof Blob) {
+          // Screen frame received!
+          handleScreenBlob(event.data);
+        }
+      };
+
+      ws.onclose = () => {
+        document.getElementById('statusDot').className = 'status-dot';
+        document.getElementById('statusText').innerText = 'Отключен';
+        if (isManual) {
+          document.getElementById('authError').style.display = 'block';
+          document.getElementById('authModal').style.display = 'flex';
+        } else {
+          setTimeout(() => connectWS(), 3000);
+        }
+      };
+    }
+
+    function handleJsonMessage(msg) {
+      if (msg.type === 'init') {
+        screenW = msg.width;
+        screenH = msg.height;
+        canvas.width = screenW;
+        canvas.height = screenH;
+      } else if (msg.type === 'term_output') {
+        const out = document.getElementById('termOutput');
+        out.textContent += msg.data;
+        out.scrollTop = out.scrollHeight;
+      } else if (msg.type === 'files') {
+        renderFileList(msg.path, msg.items);
+      } else if (msg.type === 'stats') {
+        document.getElementById('cpuVal').innerText = `${msg.cpu}%`;
+        document.getElementById('cpuBar').style.width = `${msg.cpu}%`;
+        document.getElementById('ramVal').innerText = `${msg.ram}%`;
+        document.getElementById('ramBar').style.width = `${msg.ram}%`;
+        document.getElementById('diskVal').innerText = `${msg.disk}%`;
+        document.getElementById('diskBar').style.width = `${msg.disk}%`;
+      }
+    }
+
+    function handleScreenBlob(blob) {
+      const img = new Image();
+      const url = URL.createObjectURL(blob);
+      img.onload = () => {
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        fpsCount++;
+        const now = Date.now();
+        if (now - lastFpsTime >= 1000) {
+          document.getElementById('fpsBadge').innerText = `${fpsCount} FPS`;
+          fpsCount = 0;
+          lastFpsTime = now;
+        }
+      };
+      img.src = url;
+    }
+
+    // Input Coordinate Mapping
+    function getCanvasCoords(clientX, clientY) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = screenW / rect.width;
+      const scaleY = screenH / rect.height;
+      return {
+        x: Math.round((clientX - rect.left) * scaleX),
+        y: Math.round((clientY - rect.top) * scaleY)
+      };
+    }
+
+    // Canvas Mouse & Touch Events
+    canvas.addEventListener('mousemove', (e) => {
+      if (isTouching) return;
+      const { x, y } = getCanvasCoords(e.clientX, e.clientY);
+      sendInput({ action: 'mousemove', x, y });
+    });
+
+    canvas.addEventListener('mousedown', (e) => {
+      const { x, y } = getCanvasCoords(e.clientX, e.clientY);
+      const button = e.button === 2 ? 'right' : 'left';
+      sendInput({ action: 'mousedown', x, y, button });
+    });
+
+    canvas.addEventListener('mouseup', (e) => {
+      const { x, y } = getCanvasCoords(e.clientX, e.clientY);
+      const button = e.button === 2 ? 'right' : 'left';
+      sendInput({ action: 'mouseup', x, y, button });
+    });
+
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      sendInput({ action: 'scroll', deltaY: e.deltaY });
+    }, { passive: false });
+
+    // Touch Support for Mobile Browsers
+    let touchStartTime = 0;
+    let touchStartPos = { x: 0, y: 0 };
+    let touchMoved = false;
+
+    canvas.addEventListener('touchstart', (e) => {
+      isTouching = true;
+      if (e.touches.length === 1) {
+        touchStartTime = Date.now();
+        const t = e.touches[0];
+        const coords = getCanvasCoords(t.clientX, t.clientY);
+        touchStartPos = coords;
+        touchMoved = false;
+        showTouch(t.clientX, t.clientY);
+        sendInput({ action: 'mousemove', x: coords.x, y: coords.y });
+      }
+    }, { passive: true });
+
+    canvas.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 1) {
+        const t = e.touches[0];
+        const coords = getCanvasCoords(t.clientX, t.clientY);
+        touchMoved = true;
+        showTouch(t.clientX, t.clientY);
+        sendInput({ action: 'mousemove', x: coords.x, y: coords.y });
+      }
+    }, { passive: true });
+
+    canvas.addEventListener('touchend', (e) => {
+      isTouching = false;
+      hideTouch();
+      const touchDuration = Date.now() - touchStartTime;
+      // Tap detected!
+      if (!touchMoved) {
+        const button = touchDuration > 500 ? 'right' : 'left';
+        sendInput({ action: 'click', x: touchStartPos.x, y: touchStartPos.y, button });
+      }
+    });
+
+    function showTouch(x, y) {
+      const ind = document.getElementById('touchIndicator');
+      ind.style.display = 'block';
+      ind.style.left = `${x}px`;
+      ind.style.top = `${y}px`;
+    }
+    function hideTouch() {
+      document.getElementById('touchIndicator').style.display = 'none';
+    }
+
+    function sendInput(data) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'input', ...data }));
+      }
+    }
+
+    // Keyboard & Shortcuts
+    function toggleKeyboard() {
+      const drawer = document.getElementById('keyboardDrawer');
+      const isVisible = drawer.style.display === 'flex';
+      drawer.style.display = isVisible ? 'none' : 'flex';
+      if (!isVisible) document.getElementById('quickTextInput').focus();
+    }
+
+    function sendQuickText() {
+      const input = document.getElementById('quickTextInput');
+      const text = input.value;
+      if (!text) return;
+      sendInput({ action: 'type', text });
+      input.value = '';
+    }
+
+    function sendKey(key) {
+      sendInput({ action: 'key', key });
+    }
+
+    function sendShortcut(combo) {
+      sendInput({ action: 'shortcut', combo });
+    }
+
+    function changeQuality() {
+      sendQuality();
+    }
+
+    function sendQuality() {
+      const q = document.getElementById('qualitySelect').value;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'config', quality: q }));
+      }
+    }
+
+    // Tabs Switcher
+    function switchTab(tabId, btn) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+      document.getElementById(tabId).classList.add('active');
+      btn.classList.add('active');
+      if (tabId === 'filesTab') refreshFiles();
+      if (tabId === 'settingsTab') loadSystemStats();
+    }
+
+    // Terminal
+    function sendTermCommand() {
+      const input = document.getElementById('termInput');
+      const cmd = input.value.trim();
+      if (!cmd) return;
+      document.getElementById('termOutput').textContent += `\n> ${cmd}\n`;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'terminal', command: cmd }));
+      }
+      input.value = '';
+    }
+
+    function runPreset(cmd) {
+      document.getElementById('termInput').value = cmd;
+      sendTermCommand();
+    }
+
+    // Files
+    function refreshFiles() {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'list_files', path: currentPath }));
+      }
+    }
+
+    function navigateFiles(rel) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'navigate_files', rel, current: currentPath }));
+      }
+    }
+
+    function renderFileList(path, items) {
+      currentPath = path;
+      document.getElementById('currentPath').innerText = path;
+      const container = document.getElementById('fileList');
+      container.innerHTML = '';
+      items.forEach(it => {
+        const row = document.createElement('div');
+        row.className = 'file-item';
+        row.innerHTML = `
+          <div class="file-info">
+            <span class="file-icon">${it.is_dir ? '📁' : '📄'}</span>
+            <span>${it.name}</span>
+          </div>
+          <span style="color:var(--text-dim);font-size:11px;">${it.size || ''}</span>
+        `;
+        row.onclick = () => {
+          if (it.is_dir) {
+            currentPath = it.path;
+            refreshFiles();
+          } else {
+            window.open(`/api/download?path=${encodeURIComponent(it.path)}&pin=${encodeURIComponent(authPin)}`, '_blank');
+          }
+        };
+        container.appendChild(row);
+      });
+    }
+
+    // Stats
+    function loadSystemStats() {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'get_stats' }));
+      }
+    }
+
+    function executePower(action) {
+      if (confirm(`Вы уверены, что хотите выполнить: ${action}?`)) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'power', action }));
+        }
+      }
+    }
+  </script>
+</body>
+</html>
